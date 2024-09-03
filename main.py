@@ -22,7 +22,7 @@ async def on_ready():
 
 
 @bot.command()
-@commands.has_role("Staff")  # Ensure only Staff members can run this command
+@commands.has_role("Mod")  # Ensure only Moderators can run this command
 async def check_staff_activity(ctx):
     # Get the channel where we will check for messages
     hunting_runs_channel = discord.utils.get(ctx.guild.text_channels, name="hunting-runs")
@@ -37,16 +37,16 @@ async def check_staff_activity(ctx):
         return
 
     # Get the ticket-transcripts channel
-    ticket_transcripts_channel = discord.utils.get(ctx.guild.text_channels, name="ticket-transcripts")
+    ticket_transcripts_channel = discord.utils.get(ctx.guild.text_channels, name="staff-logs")
     if not ticket_transcripts_channel:
         await ctx.send("The 'ticket-transcripts' channel was not found.")
         return
 
     # Get the Staff and Security roles
-    staff_role = discord.utils.get(ctx.guild.roles, name="Staff")
+    organiser_role = discord.utils.get(ctx.guild.roles, name="Org")
     security_role = discord.utils.get(ctx.guild.roles, name="Security")
-    if not staff_role:
-        await ctx.send("The 'Staff' role was not found.")
+    if not organiser_role:
+        await ctx.send("The 'Org' role was not found.")
         return
     if not security_role:
         await ctx.send("The 'Security' role was not found.")
@@ -64,21 +64,28 @@ async def check_staff_activity(ctx):
     inactive_security = []
 
     # Calculate the date threshold (2 months ago)
-    two_months_ago = datetime.now(timezone.utc) - timedelta(minutes=2)
+    two_months_ago = datetime.now(timezone.utc) - timedelta(days=60)
 
     activity_results.append("**ORGANISER ACTIVITY**\n")
-    # 1. Iterate through all members with the Staff role
+    # 1. Iterate through all members with the Org role
     for member in ctx.guild.members:
-        if staff_role in member.roles:
+        if organiser_role in member.roles:
             # Get the most recent message from the user that includes @here
             async for message in hunting_runs_channel.history(limit=10000):
-                if message.author == member and "@here" in message.content:
-                    # Add the result to the list
-                    activity_results.append(f"<@{member.id}> `{member.display_name}` - Last @here message: {message.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-
+                if message.author == member and "@here" in message.content and "key" not in message.content:
+                    # Check if the organiser was active
                     message_date = message.created_at
                     if message_date < two_months_ago:
                         inactive_organisers.append(member)
+                        active = False
+                    else:
+                        active = True
+
+                    # Add the result to the list
+                    if active:
+                        activity_results.append(f"<@{member.id}> / `{member.display_name}`\nLast run: {message.created_at.strftime('%Y-%m-%d')} - {message.jump_url}\nActive: ✅\n")
+                    else:
+                        activity_results.append(f"<@{member.id}> / `{member.display_name}`\nLast run: {message.created_at.strftime('%Y-%m-%d')} - {message.jump_url}\nActive: ❌\n")
                     break
 
     activity_results.append("\n**SECURITY ACTIVITY**\n")
@@ -91,12 +98,18 @@ async def check_staff_activity(ctx):
                     for embed in message.embeds:
                         for field in embed.fields:
                             if str(member.id) in field.value:
-                                # Add the result to the list
-                                activity_results.append(f"<@{member.id}> `{member.display_name}` - Last ticket: {message.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-
                                 message_date = message.created_at
                                 if message_date < two_months_ago:
                                     inactive_security.append(member)
+                                    active = False
+                                else:
+                                    active = True
+
+                                # Add the result to the list
+                                if active:
+                                    activity_results.append(f"<@{member.id}> `{member.display_name}`\nLast ticket: {message.created_at.strftime('%Y-%m-%d')} - {message.jump_url}\nActive: ✅\n")
+                                if not active:
+                                    activity_results.append(f"<@{member.id}> `{member.display_name}`\nLast ticket: {message.created_at.strftime('%Y-%m-%d')} - {message.jump_url}\nActive: ❌\n")
                                 break
                         break
                     break
@@ -120,7 +133,7 @@ async def check_staff_activity(ctx):
         inactive_staff_message = "\n**INACTIVE SECURITY** (activity within the last 2 months):\n\n" + "\n".join([f"<@{member.id}> - `{member.display_name}`" for member in inactive_security])
         await staff_activity_channel.send(inactive_staff_message)
     else:
-        await staff_activity_channel.send("\n**INACTIVE SECURITY** (activity within the last 2 months):\nNo inactive security found.")
+        await staff_activity_channel.send("\n**INACTIVE SECURITY** (activity within the last 2 months):\n\nNo inactive security found.")
 
 # Run the bot with your token
 bot.run(TOKEN)
